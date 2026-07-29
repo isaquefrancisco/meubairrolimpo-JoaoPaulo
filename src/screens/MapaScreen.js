@@ -11,7 +11,8 @@ import {
   Alert,
   Platform,
   ScrollView,
-  StatusBar
+  StatusBar,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../supabase';
@@ -35,6 +36,7 @@ export default function MapaScreen() {
   const [carregando, setCarregando] = useState(true);
   const [buscandoLocal, setBuscandoLocal] = useState(false);
   const [selectedDenuncia, setSelectedDenuncia] = useState(null);
+  const [fotoExpandida, setFotoExpandida] = useState(null);
 
   const [regiao, setRegiao] = useState({
     latitude: -7.0812, // Picos - PI
@@ -149,7 +151,7 @@ export default function MapaScreen() {
                       <Text style={styles.webItemTitle}>{item.titulo}</Text>
                       <Text style={[
                         styles.webStatus, 
-                        { color: item.status === 'Concluído' ? '#16A34A' : '#EF4444' }
+                        { color: (item.status === 'Concluído' || item.status === 'Concluída') ? '#16A34A' : '#EF4444' }
                       ]}>
                         {item.status || 'Pendente'}
                       </Text>
@@ -171,14 +173,15 @@ export default function MapaScreen() {
                 const lat = item.latitude ? parseFloat(item.latitude) : -7.0812 + (Math.sin(index) * 0.008);
                 const lon = item.longitude ? parseFloat(item.longitude) : -41.4674 + (Math.cos(index) * 0.008);
 
-                // Cor verde para Concluído, vermelho para Pendente
-                const pinColor = item.status === 'Concluído' ? '#16A34A' : '#EF4444';
+                // No Android/iOS (Google Maps), pinColor aceita 'green' e 'red' para manter o pino/seta nativo original
+                const isConcluida = item.status === 'Concluído' || item.status === 'Concluída';
+                const colorName = isConcluida ? 'green' : 'red';
 
                 return (
                   <Marker
                     key={item.id.toString()}
                     coordinate={{ latitude: lat, longitude: lon }}
-                    pinColor={pinColor}
+                    pinColor={colorName}
                     onPress={(e) => {
                       e.stopPropagation();
                       setSelectedDenuncia(item);
@@ -197,7 +200,10 @@ export default function MapaScreen() {
 
           {/* Card Flutuante de Detalhes da Denúncia quando clica no marcador */}
           {selectedDenuncia && (
-            <View style={styles.detailCard}>
+            <View 
+              style={styles.detailCard}
+              onStartShouldSetResponder={() => true}
+            >
               <View style={styles.detailHeader}>
                 <View>
                   <Text style={styles.detailCategory}>{selectedDenuncia.categoria}</Text>
@@ -212,7 +218,20 @@ export default function MapaScreen() {
               </View>
 
               {selectedDenuncia.foto && (
-                <Image source={{ uri: selectedDenuncia.foto }} style={styles.detailImage} />
+                <TouchableOpacity 
+                  activeOpacity={0.7} 
+                  onPress={() => {
+                    console.log('Abrindo foto:', selectedDenuncia.foto);
+                    setFotoExpandida(selectedDenuncia.foto);
+                  }}
+                  style={styles.detailImageContainer}
+                >
+                  <Image source={{ uri: selectedDenuncia.foto }} style={styles.detailImage} />
+                  <View style={styles.expandOverlay} pointerEvents="none">
+                    <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
+                    <Text style={styles.expandText}>Toque para ampliar</Text>
+                  </View>
+                </TouchableOpacity>
               )}
 
               <Text style={styles.detailDesc}>{selectedDenuncia.descricao}</Text>
@@ -228,11 +247,11 @@ export default function MapaScreen() {
                 {/* Badge de Status */}
                 <View style={[
                   styles.statusBadge, 
-                  { backgroundColor: selectedDenuncia.status === 'Concluído' ? '#DCFCE7' : '#FEE2E2' }
+                  { backgroundColor: (selectedDenuncia.status === 'Concluído' || selectedDenuncia.status === 'Concluída') ? '#DCFCE7' : '#FEE2E2' }
                 ]}>
                   <Text style={[
                     styles.statusBadgeText, 
-                    { color: selectedDenuncia.status === 'Concluído' ? '#15803D' : '#B91C1C' }
+                    { color: (selectedDenuncia.status === 'Concluído' || selectedDenuncia.status === 'Concluída') ? '#15803D' : '#B91C1C' }
                   ]}>
                     {selectedDenuncia.status || 'Pendente'}
                   </Text>
@@ -242,6 +261,39 @@ export default function MapaScreen() {
           )}
         </View>
       )}
+
+      {/* Modal de Foto em Tela Cheia */}
+      <Modal
+        visible={!!fotoExpandida}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setFotoExpandida(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <StatusBar barStyle="light-content" backgroundColor="#000000" />
+          <TouchableOpacity 
+            style={styles.modalCloseButton} 
+            onPress={() => setFotoExpandida(null)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {fotoExpandida && (
+            <TouchableOpacity 
+              style={styles.modalImageWrapper} 
+              activeOpacity={1} 
+              onPress={() => setFotoExpandida(null)}
+            >
+              <Image 
+                source={{ uri: fotoExpandida }} 
+                style={styles.modalFullImage} 
+                resizeMode="contain" 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -344,7 +396,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
-    elevation: 8,
+    elevation: 20,
+    zIndex: 1000,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     maxHeight: 330
@@ -370,12 +423,62 @@ const styles = StyleSheet.create({
   closeDetailButton: {
     padding: 2
   },
+  detailImageContainer: {
+    position: 'relative',
+    marginBottom: 10,
+    borderRadius: 10,
+    overflow: 'hidden',
+    zIndex: 1001
+  },
   detailImage: {
     width: '100%',
     height: 120,
     borderRadius: 10,
-    marginBottom: 10,
     resizeMode: 'cover'
+  },
+  expandOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(10, 37, 64, 0.75)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  expandText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 99999,
+    elevation: 100
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 16 : 48,
+    right: 20,
+    zIndex: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 8,
+    borderRadius: 20
+  },
+  modalImageWrapper: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalFullImage: {
+    width: '94%',
+    height: '80%'
   },
   detailDesc: {
     fontSize: 13,

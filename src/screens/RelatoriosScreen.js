@@ -70,7 +70,7 @@ export default function RelatoriosScreen() {
 
       listaDenuncias.forEach(item => {
         // 1. Status
-        if (item.status === 'Concluído') {
+        if (item.status === 'Concluído' || item.status === 'Concluída') {
           countConcluidas++;
         } else {
           countPendentes++; // Pendente, Em progresso, etc.
